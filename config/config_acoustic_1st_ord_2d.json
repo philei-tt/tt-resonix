@@ -1,0 +1,11 @@
+{
+  "nx": 300, "ny": 300,
+  "dx": 0.002, "dy": 0.002,
+  "c": 343.0, "rho": 1.225,
+  "n_steps": 1200, "output_every": 4,
+  "derivative": { "coeffs": [0.5] },
+  "source": { "type": "ricker",
+              "frequency": 80.0,
+              "position": [150, 150],
+              "amplitude": 1.0 }
+}
