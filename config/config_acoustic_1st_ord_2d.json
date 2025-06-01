@@ -4,8 +4,11 @@
   "c": 343.0, "rho": 1.225,
   "n_steps": 1200, "output_every": 4,
   "derivative": { "coeffs": [0.5] },
-  "source": { "type": "ricker",
-              "frequency": 80.0,
-              "position": [150, 150],
-              "amplitude": 1.0 }
+  "source": { "type": "gaussian",
+              "frequency": 8000,
+              "position": [1, 1],
+              "amplitude": 1.0 },
+  // "rho_file": "rho_circle.txt",
+  // "obstacle_file": "obstacles.txt",
+  // "absorb_coef": 150.0
 }
