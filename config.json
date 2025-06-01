@@ -1,0 +1,12 @@
+{
+  "nx": 201, "ny": 201,
+  "dx": 0.01, "dy": 0.01,
+  "c": 343.0,
+  "dt": null,
+  "n_steps": 800,
+  "output_every": 4,
+  "source": { "type": "gaussian",
+              "frequency": 80.0,
+              "position": [100, 100],
+              "amplitude": 1.0 }
+}
