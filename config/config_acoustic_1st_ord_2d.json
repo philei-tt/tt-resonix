@@ -1,13 +1,43 @@
 {
-  "nx": 300, "ny": 300,
-  "dx": 0.002, "dy": 0.002,
-  "c": 343.0, "rho": 1.225,
-  "n_steps": 1200, "output_every": 4,
-  "derivative": { "coeffs": [0.5] },
-  "source": { "type": "gaussian",
-              "frequency": 8000,
-              "position": [1, 1],
-              "amplitude": 1.0 },
+  "nx": 600,
+  "ny": 600,
+  "dx": 0.002,
+  "dy": 0.002,
+  "c": 343.0,
+  "rho": 1.225,
+  "n_steps": 1500,
+  "output_every": 5,
+  "derivative": {
+    // "coeffs": [
+    //   0.5
+    // ]
+    // "coeffs": [
+    //   0.8, -0.2, 0.0380952380952381, -0.0035714285714285713
+    // ],
+    "coeffs": [
+      0.8888888888888888,
+      -0.3111111111111111,
+      0.11313131313131314,
+      -0.03535353535353535,
+      0.008702408702408702,
+      -0.001554001554001554,
+      0.0001776001776001776,
+      -9.712509712509713e-06
+    ]
+  },
+  "source": {
+    "type": "ricker", // ricler, gaussian, sin, point
+    "frequency": 80.0,
+    "position": [
+      150,
+      150
+    ],
+    "amplitude": 1.0
+  }
+  // "source": { "type": "gaussian",
+  //             "frequency": 80.0,
+  //             "position": [100, 100],
+  //             "amplitude": 100.0 }
   // "rho_file": "rho_circle.txt",
   // "obstacle_file": "obstacles.txt",
   // "absorb_coef": 150.0
