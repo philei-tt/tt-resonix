@@ -3,7 +3,8 @@
 
 using nlohmann::json;
 
-Config Config::read_config(const std::string& path) {
+template<typename Dtype>
+Config<Dtype> Config<Dtype>::read_config(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
         throw std::runtime_error("Could not open config file: " + path);
@@ -37,7 +38,7 @@ Config Config::read_config(const std::string& path) {
             cfg.coeffs.push_back(c);
         }
     } else if (d.contains("m")) {
-        cfg.coeffs = make_fd_coeffs(d["m"]);
+        cfg.coeffs = make_fd_coeffs<Dtype>(d["m"]);
     } else {
         throw std::runtime_error("derivative needs 'coeffs' or 'm'");
     }
@@ -52,3 +53,7 @@ Config Config::read_config(const std::string& path) {
     cfg.sy = static_cast<int>(s["position"][1]) + cfg.m;
     return cfg;
 }
+
+
+template Config<float> Config<float>::read_config(const std::string& path);
+template Config<double> Config<double>::read_config(const std::string& path);

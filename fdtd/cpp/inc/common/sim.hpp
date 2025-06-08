@@ -5,7 +5,11 @@
 template <typename T>
 inline T sqr(T x) { return x * x; }
 
-std::vector<double> make_fd_coeffs(int m);
+template<typename Dtype>
+std::vector<Dtype> make_fd_coeffs(int m);
 
-double gaussian_wavelet(double t, double f0, double amp);
-double ricker_wavelet(double t, double f0, double amp);
+template<typename Dtype>
+double gaussian_wavelet(Dtype t, Dtype f0, Dtype amp);
+
+template<typename Dtype>
+double ricker_wavelet(Dtype t, Dtype f0, Dtype amp);

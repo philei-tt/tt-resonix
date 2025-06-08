@@ -28,7 +28,8 @@ def main():
     if not path.exists():
         parser.error(f"{path} does not exist")
 
-    frames = np.load(path)["frames"]            # shape (n_frames, ny, nx)
+    # Use best (float64) precision for visualisation
+    frames = np.load(path)["frames"].astype(np.float64)            # shape (n_frames, ny, nx)
     run_animation(
         frames, 
         interval=args.interval, 

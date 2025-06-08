@@ -1,11 +1,12 @@
 #include "common/sim.hpp"
 
-std::vector<double> make_fd_coeffs(int m) {
+template <typename Dtype>
+std::vector<Dtype> make_fd_coeffs(int m) {
     // Solve  Σ_k c_k k^(2n+1) = rhs_n,  n = 0 … m-1
-    std::vector<double> rhs(m, 0.0);
+    std::vector<Dtype> rhs(m, 0.0);
     rhs[0] = 0.5;
 
-    std::vector<std::vector<double>> A(m, std::vector<double>(m));
+    std::vector<std::vector<Dtype>> A(m, std::vector<Dtype>(m));
     for (int n = 0; n < m; ++n) {
         for (int k = 1; k <= m; ++k) {
             A[n][k - 1] = std::pow(k, 2 * n + 1);
@@ -15,7 +16,7 @@ std::vector<double> make_fd_coeffs(int m) {
     // Gaussian elimination (tiny m, so simplicity beats libraries)
     for (int i = 0; i < m; ++i) {
         // pivot
-        double piv = A[i][i];
+        Dtype piv = A[i][i];
         for (int j = i; j < m; ++j) {
             A[i][j] /= piv;
         }
@@ -23,7 +24,7 @@ std::vector<double> make_fd_coeffs(int m) {
         // eliminate
         for (int r = 0; r < m; ++r) {
             if (r != i) {
-                double f = A[r][i];
+                Dtype f = A[r][i];
                 for (int c = i; c < m; ++c) {
                     A[r][c] -= f * A[i][c];
                 }
@@ -34,11 +35,23 @@ std::vector<double> make_fd_coeffs(int m) {
     return rhs;  // length-m
 }
 
-double gaussian_wavelet(double t, double f0, double amp) {
-    double tau = 1.0 / f0, t0 = 3.0 * tau;
+template <typename Dtype>
+double gaussian_wavelet(Dtype t, Dtype f0, Dtype amp) {
+    Dtype tau = 1.0 / f0, t0 = 3.0 * tau;
     return amp * std::exp(-sqr(t - t0) / sqr(tau));
 }
-double ricker_wavelet(double t, double f0, double amp) {
-    double a = M_PI * f0 * (t - 1.0 / f0);
+
+template <typename Dtype>
+double ricker_wavelet(Dtype t, Dtype f0, Dtype amp) {
+    Dtype a = M_PI * f0 * (t - 1.0 / f0);
     return amp * (1.0 - 2.0 * sqr(a)) * std::exp(-sqr(a));
 }
+
+template std::vector<float> make_fd_coeffs<float>(int m);
+template std::vector<double> make_fd_coeffs<double>(int m);
+
+template double gaussian_wavelet<float>(float t, float f0, float amp);
+template double gaussian_wavelet<double>(double t, double f0, double amp);
+
+template double ricker_wavelet<float>(float t, float f0, float amp);
+template double ricker_wavelet<double>(double t, double f0, double amp);

@@ -15,6 +15,7 @@ from argparse import ArgumentParser
 
 import numpy as np
 
+dtype = np.float64  # data type used for simulation
 
 def read_config(path):
     with open(path) as f:
@@ -58,9 +59,9 @@ def make_fd_coeffs(m: int) -> np.ndarray:
     >>> make_fd_coeffs(4)
     array([ 0.8       , -0.2       ,  0.03809524, -0.00357143])
     """
-    k = np.arange(1, m + 1, dtype=np.float32)          # 1 … m
-    A = np.vstack([k ** (2*n + 1) for n in range(m)]).astype(np.float32)   # NO .T !
-    rhs = np.zeros(m, dtype=np.float32)            # right-hand side
+    k = np.arange(1, m + 1, dtype=dtype)          # 1 … m
+    A = np.vstack([k ** (2*n + 1) for n in range(m)]).astype(dtype)   # NO .T !
+    rhs = np.zeros(m, dtype=dtype)            # right-hand side
     rhs[0] = 0.5                                  # Σ c_k k = ½
     return np.linalg.solve(A, rhs)
 
@@ -158,7 +159,7 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
     n_steps, every = cfg["n_steps"], cfg["output_every"]
     deriv_cfg = cfg["derivative"]
     if "coeffs" in deriv_cfg:
-        coeffs = np.asarray(deriv_cfg["coeffs"], dtype=np.float32)
+        coeffs = np.asarray(deriv_cfg["coeffs"], dtype=dtype)
     elif "m" in deriv_cfg:
         coeffs = make_fd_coeffs(int(deriv_cfg["m"]))
     else:
@@ -172,7 +173,7 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
 
     # --- fields --- #
     shape_full = (ny + 2 * m, nx + 2 * m)
-    p = np.zeros(shape_full, dtype=np.float32)
+    p = np.zeros(shape_full, dtype=dtype)
     vx = np.zeros_like(p)
     vy = np.zeros_like(p)
     core = (slice(m, m + ny), slice(m, m + nx))  # interior slice
@@ -187,7 +188,7 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
     frames = None
     if every != 0:
         n_frames = (n_steps // every) + 1
-        frames = np.zeros((n_frames, ny, nx), dtype=np.float32)
+        frames = np.zeros((n_frames, ny, nx), dtype=dtype)
         frame_idx = 0
         frames[frame_idx] = p[core].copy()
 

@@ -5,17 +5,18 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
+template<typename Dtype>
 struct Config {
     int nx, ny, n_steps, output_every;
     double dx, dy, c, rho;
-    std::vector<double> coeffs;  // c1..cm
+    std::vector<Dtype> coeffs;  // c1..cm
     int m;                       // halo width
     // source
     std::string src_type;
     double f0, amp;
     int sx, sy;  // in core indices
 
-    static Config read_config(const std::string& path);
+    static Config<Dtype> read_config(const std::string& path);
 };
 
 // TODO: Move to a cpp file
@@ -38,10 +39,10 @@ struct fmt::formatter<std::vector<T>> : fmt::formatter<std::string> {
 
 // TODO: Move to a cpp file
 // make Config printable with fmt:
-template <>
-struct fmt::formatter<Config> : fmt::formatter<std::string> {
+template <typename T>
+struct fmt::formatter<Config<T>> : fmt::formatter<std::string> {
     template <typename FormatContext>
-    auto format(const Config& cfg, FormatContext& ctx) const {
+    auto format(const Config<T>& cfg, FormatContext& ctx) const {
         std::string str = fmt::format(
             "Config(\n\t ny={}, nx={},\n\t dx={}, dy={},\n\t c={}, rho={},\n\t n_steps={}, output_every={},\n\t m={}, "
             "coeffs={},\n\t "

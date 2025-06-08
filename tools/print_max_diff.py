@@ -14,8 +14,9 @@ def main():
     if not path0.exists() or not path1.exists():
         parser.error(f"{path0} or {path1} does not exist")
 
-    frames0 = np.load(path0)["frames"]            # shape (n_frames, ny, nx)
-    frames1 = np.load(path1)["frames"]            # shape (n_frames, ny, nx)
+    # use best (float64) precision for comparison
+    frames0 = np.load(path0)["frames"].astype(np.float64)            # shape (n_frames, ny, nx)
+    frames1 = np.load(path1)["frames"].astype(np.float64)            # shape (n_frames, ny, nx)
     if frames0.shape != frames1.shape:
         parser.error(f"Wavefields have different shapes: {frames0.shape} vs {frames1.shape}")
     diff = np.abs(frames0 - frames1)

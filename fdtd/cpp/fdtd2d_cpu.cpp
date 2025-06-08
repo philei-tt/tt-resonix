@@ -19,6 +19,7 @@
 using std::size_t;
 
 inline size_t idx(size_t i, size_t j, size_t stride) { return i * stride + j; }
+using Dtype = float;  // data type for the simulation
 
 // -----------------------------------------------------------------------------
 // Simulation
@@ -28,7 +29,7 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: " << argv[0] << " config.json\n";
         return 1;
     }
-    auto C = Config::read_config(argv[1]);
+    auto C = Config<Dtype>::read_config(argv[1]);
     fmt::print("{}\n", C);
 
     const int halo = C.m;
@@ -36,18 +37,18 @@ int main(int argc, char** argv) {
     const size_t Nx = C.nx + 2 * halo;
     const size_t stride = Nx;
 
-    const double dt = 0.4 * std::min(C.dx, C.dy) / (C.c * std::sqrt(2.0));
+    const Dtype dt = 0.4 * std::min(C.dx, C.dy) / (C.c * std::sqrt(2.0));
 
-    std::vector<float> p(Ny * Nx, 0.0f);
-    std::vector<float> vx(Ny * Nx, 0.0f);
-    std::vector<float> vy(Ny * Nx, 0.0f);
+    std::vector<Dtype> p(Ny * Nx, 0.0f);
+    std::vector<Dtype> vx(Ny * Nx, 0.0f);
+    std::vector<Dtype> vy(Ny * Nx, 0.0f);
 
     const int n_frames = C.n_steps / C.output_every + 1;
-    std::vector<float> frames;
+    std::vector<Dtype> frames;
     frames.reserve(static_cast<size_t>(n_frames) * C.ny * C.nx);
 
     auto coeff = C.coeffs;  // copy for brevity
-    auto refresh = [&](std::vector<float>& f) {
+    auto refresh = [&](std::vector<Dtype>& f) {
         // West & East
         for (size_t i = halo; i < Ny - halo; ++i) {
             for (int k = 1; k <= halo; ++k) {
@@ -76,10 +77,10 @@ int main(int argc, char** argv) {
     };
 
     // Pre-compute reciprocal distances
-    const float inv_dx = 1.0f / C.dx;
-    const float inv_dy = 1.0f / C.dy;
-    const float rhoc2 = static_cast<float>(C.rho * C.c * C.c);
-    const float inv_rho = static_cast<float>(1.0 / C.rho);
+    const Dtype inv_dx = 1.0f / C.dx;
+    const Dtype inv_dy = 1.0f / C.dy;
+    const Dtype rhoc2 = static_cast<Dtype>(C.rho * C.c * C.c);
+    const Dtype inv_rho = static_cast<Dtype>(1.0 / C.rho);
 
     // ---------------------------------------------------------------------
     // output frame 0  (pressure is all zeros)
@@ -93,20 +94,20 @@ int main(int argc, char** argv) {
     auto sim_start = std::chrono::high_resolution_clock::now();
 
     for (int it = 1; it <= C.n_steps; ++it) {
-        double t = it * dt;
+        Dtype t = it * dt;
 
         // ----------- divergence of v
-        std::vector<float> div(C.ny * C.nx, 0.0f);
+        std::vector<Dtype> div(C.ny * C.nx, 0.0f);
         for (int i = 0; i < C.ny; ++i) {
             size_t ii = i + halo;
             for (int j = 0; j < C.nx; ++j) {
                 size_t jj = j + halo;
-                double sumx = 0.0, sumy = 0.0;
+                Dtype sumx = 0.0, sumy = 0.0;
                 for (int k = 1; k <= halo; ++k) {
-                    sumx += coeff[k - 1] * (double(vx[idx(ii, jj + k, stride)]) - double(vx[idx(ii, jj - k, stride)]));
-                    sumy += coeff[k - 1] * (double(vy[idx(ii + k, jj, stride)]) - double(vy[idx(ii - k, jj, stride)]));
+                    sumx += coeff[k - 1] * (vx[idx(ii, jj + k, stride)] - vx[idx(ii, jj - k, stride)]);
+                    sumy += coeff[k - 1] * (vy[idx(ii + k, jj, stride)] - vy[idx(ii - k, jj, stride)]);
                 }
-                div[idx(i, j, C.nx)] = float(sumx * inv_dx + sumy * inv_dy);
+                div[idx(i, j, C.nx)] = Dtype(sumx * inv_dx + sumy * inv_dy);
             }
         }
 
@@ -115,15 +116,15 @@ int main(int argc, char** argv) {
             size_t ii = i + halo;
             for (int j = 0; j < C.nx; ++j) {
                 size_t jj = j + halo;
-                p[idx(ii, jj, stride)] -= float(dt) * rhoc2 * div[idx(i, j, C.nx)];
+                p[idx(ii, jj, stride)] -= Dtype(dt) * rhoc2 * div[idx(i, j, C.nx)];
             }
         }
 
         // ----------- point source
         if (C.src_type == "gaussian") {
-            p[idx(C.sy, C.sx, stride)] += float(gaussian_wavelet(t, C.f0, C.amp));
+            p[idx(C.sy, C.sx, stride)] += gaussian_wavelet<Dtype>(t, C.f0, C.amp);
         } else {
-            p[idx(C.sy, C.sx, stride)] += float(ricker_wavelet(t, C.f0, C.amp));
+            p[idx(C.sy, C.sx, stride)] += ricker_wavelet<Dtype>(t, C.f0, C.amp);
         }
 
         // ----------- grad p  →  update v
@@ -131,13 +132,13 @@ int main(int argc, char** argv) {
             size_t ii = i + halo;
             for (int j = 0; j < C.nx; ++j) {
                 size_t jj = j + halo;
-                double gpx = 0.0, gpy = 0.0;
+                Dtype gpx = 0.0, gpy = 0.0;
                 for (int k = 1; k <= halo; ++k) {
-                    gpx += coeff[k - 1] * (double(p[idx(ii, jj + k, stride)]) - double(p[idx(ii, jj - k, stride)]));
-                    gpy += coeff[k - 1] * (double(p[idx(ii + k, jj, stride)]) - double(p[idx(ii - k, jj, stride)]));
+                    gpx += coeff[k - 1] * (p[idx(ii, jj + k, stride)] - p[idx(ii, jj - k, stride)]);
+                    gpy += coeff[k - 1] * (p[idx(ii + k, jj, stride)] - p[idx(ii - k, jj, stride)]);
                 }
-                vx[idx(ii, jj, stride)] -= float(dt) * inv_rho * float(gpx * inv_dx);
-                vy[idx(ii, jj, stride)] -= float(dt) * inv_rho * float(gpy * inv_dy);
+                vx[idx(ii, jj, stride)] -= dt * inv_rho * gpx * inv_dx;
+                vy[idx(ii, jj, stride)] -= dt * inv_rho * gpy * inv_dy;
             }
         }
 
