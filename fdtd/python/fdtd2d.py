@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from pprint import pprint
 from tqdm import tqdm
+import time
+from argparse import ArgumentParser
 
 import numpy as np
 
@@ -41,52 +43,51 @@ def read_config(path):
 # ------------------------------------------------------------------------- #
 # central derivative with Neumann (mirror) edges
 # ------------------------------------------------------------------------- #
-def stencil(field, coeffs, h, axis):
+def stencil_halo(field, coeffs, h, axis):
     """
-    Central finite difference with an arbitrary symmetric stencil and
-    zero-gradient (Neumann) boundaries obtained by edge mirroring.
-
-    Parameters
-    ----------
-    field : 2-D ndarray
-    coeffs : sequence of length m   - weights c₁ … c_m
-    h : float                       - grid spacing in chosen axis
-    axis : 0 for y-direction, 1 for x-direction
+    Central finite difference on a field that already carries a halo of
+    width len(coeffs).  Returned array has *only the interior* values.
     """
-    m = len(coeffs)  # stencil half-width
-    # pad with mirrored edge values so that ∂/∂n = 0 at the wall
-    f_ext = np.pad(field, ((m, m), (m, m)), mode="edge")
-
-    slc_core = (
-        slice(m, m + field.shape[0]),
-        slice(m, m + field.shape[1]),
-    )
-    df = np.zeros_like(field)
-
-    for k, c_k in enumerate(coeffs, start=1):
-        if axis == 0:  # derivative along y
-            up = slice(m - k, m - k + field.shape[0])
-            down = slice(m + k, m + k + field.shape[0])
-            df += c_k * (f_ext[up, slc_core[1]] - f_ext[down, slc_core[1]])
-        else:  # derivative along x
-            left = slice(m - k, m - k + field.shape[1])
-            right = slice(m + k, m + k + field.shape[1])
-            df += c_k * (f_ext[slc_core[0], left] - f_ext[slc_core[0], right])
-
-    return df / h
+    m = len(coeffs)
+    f = field  # alias for brevity
+    if axis == 0:  # y-derivative
+        df = (
+            sum(
+                c_k * (f[m - k : -m - k, m:-m] - f[m + k : None if m == k else -m + k, m:-m])
+                for k, c_k in enumerate(coeffs, 1)
+            ) / h
+        )
+    else:  # x-derivative
+        df = (
+            sum(
+                c_k * (f[m:-m, m - k : -m - k] - f[m:-m, m + k : None if m == k else -m + k])
+                for k, c_k in enumerate(coeffs, 1)
+            ) / h
+        )
+    return df
 
 
 def divergence(vx, vy, coeffs, dx, dy):
-    dvdx = stencil(vx, coeffs, dx, axis=1)
-    dvdy = stencil(vy, coeffs, dy, axis=0)
+    dvdx = stencil_halo(vx, coeffs, dx, axis=1)
+    dvdy = stencil_halo(vy, coeffs, dy, axis=0)
     return dvdx + dvdy
 
 
 def gradient(p, coeffs, dx, dy):
     """Return ∇p as (dp/dx, dp/dy)."""
-    dpdx = stencil(p, coeffs, dx, axis=1)
-    dpdy = stencil(p, coeffs, dy, axis=0)
+    dpdx = stencil_halo(p, coeffs, dx, axis=1)
+    dpdy = stencil_halo(p, coeffs, dy, axis=0)
     return dpdx, dpdy
+
+
+def refresh_neumann(field, m):
+    """Copy edge values outwards: ∂/∂n = 0 (rigid wall)."""
+    # edges parallel to y
+    field[:, :m] = field[:, m][:, None]  # west
+    field[:, -m:] = field[:, -m - 1][:, None]  # east
+    # edges parallel to x
+    field[:m, :] = field[m, :][None, :]  # south
+    field[-m:, :] = field[-m - 1, :][None, :]  # north
 
 
 # -----------------------------------------------------------------------------#
@@ -124,7 +125,7 @@ def make_source_function(src_cfg):
 # -----------------------------------------------------------------------------#
 # main time loop
 # -----------------------------------------------------------------------------#
-def run_sim(cfg):
+def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
     print("Running 2-D FDTD acoustic wave simulation with the following configuration:")
     pprint(cfg)
     nx, ny = cfg["nx"], cfg["ny"]
@@ -132,66 +133,92 @@ def run_sim(cfg):
     c, rho = cfg["c"], cfg["rho"]
     n_steps, every = cfg["n_steps"], cfg["output_every"]
     coeffs = cfg["derivative"]["coeffs"]
+    m = len(coeffs)  # halo width = stencil half-size
 
     # --- stability (CFL) --- #
     cfl = 0.4  # fairly conservative for non-staggered update
     dt = cfl * min(dx, dy) / (c * np.sqrt(2.0))
 
     # --- fields --- #
-    p = np.zeros((ny, nx), dtype=np.float32)
+    shape_full = (ny + 2 * m, nx + 2 * m)
+    p = np.zeros(shape_full, dtype=np.float32)
     vx = np.zeros_like(p)
     vy = np.zeros_like(p)
+    core = (slice(m, m + ny), slice(m, m + nx))  # interior slice
 
     # --- source --- #
-    src_pos = tuple(cfg["source"]["position"][::-1])  # (y,x) for numpy indexing
+    src_pos = tuple(
+        m + np.array(cfg["source"]["position"][::-1])
+    )  # (y,x) for numpy indexing
     source = make_source_function(cfg["source"])
 
     # --- storage --- #
-    n_frames = (n_steps // every) + 1
-    frames = np.zeros((n_frames, ny, nx), dtype=np.float32)
-    frame_idx = 0
-    frames[frame_idx] = p.copy()
+    frames = None
+    if every != 0:
+        n_frames = (n_steps // every) + 1
+        frames = np.zeros((n_frames, ny, nx), dtype=np.float32)
+        frame_idx = 0
+        frames[frame_idx] = p[core].copy()
 
     # --- time stepping --- #
-    for it in tqdm(range(1, n_steps + 1)):
+    step_iter = tqdm(range(1, n_steps + 1), desc="Time steps", disable=not use_tqdm)
+    sim_start = time.perf_counter()
+    for it in step_iter:
         t = it * dt
 
         # update pressure
         div_v = divergence(vx, vy, coeffs, dx, dy)
-        p -= dt * rho * c**2 * div_v
+        p[core] -= dt * rho * c**2 * div_v
 
         # add point source (pressure injection)
         p[src_pos] += source(t)
 
         # update velocity
         dpdx, dpdy = gradient(p, coeffs, dx, dy)
-        vx -= dt * dpdx / rho
-        vy -= dt * dpdy / rho
+        vx[core] -= dt * dpdx / rho
+        vy[core] -= dt * dpdy / rho
 
-        # ---- Neumann (rigid) boundary ----
-        vx[:, 0] = 0.0  # west wall   (normal = x-direction)
-        vx[:, -1] = 0.0  # east wall
-        vy[0, :] = 0.0  # south wall  (normal = y-direction)
-        vy[-1, :] = 0.0  # north wall
+        # ---- rigid-wall (Neumann) condition: v_normal = 0  ------------------
+        vx[:, m] = 0.0  # west
+        vx[:, -m - 1] = 0.0  # east
+        vy[m, :] = 0.0  # south
+        vy[-m - 1, :] = 0.0  # north
+
+        # ---- Refresh halos ----
+        refresh_neumann(p, m)
+        refresh_neumann(vx, m)
+        refresh_neumann(vy, m)
 
         # record snapshot
-        if it % every == 0:
+        if every != 0 and it % every == 0:
             frame_idx += 1
-            frames[frame_idx] = p.copy()
+            frames[frame_idx] = p[core].copy()
+    sim_end = time.perf_counter()
 
-    np.savez_compressed("wavefield.npz", frames=frames)
-    print(
-        f"Finished {n_steps} steps. "
-        f"{frame_idx + 1} frames saved to wavefield.npz (dt = {dt:.3e} s)."
-    )
+    np.savez_compressed(output_file, frames=frames)
+    print(f"Finished {n_steps} steps. (dt = {dt:.3e} s)")
+    if every != 0:
+        print(f"{frame_idx + 1} frames saved to wavefield.npz.")
+    else:
+        print("No frames saved (output_every = 0).")
+    mpts = (ny * nx) * n_steps / (sim_end - sim_start) / 1e6  # million points per second
+    print(f"Simulation took {sim_end - sim_start:.2f} seconds. Mpts: {mpts:.2f} Mpts/s")
 
 
 # -----------------------------------------------------------------------------#
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python fdtd2d.py config.json")
+    # if len(sys.argv) != 2:
+    #     print("Usage: python fdtd2d.py config.json")
+    #     sys.exit(1)
+    parser = ArgumentParser(description="2-D FDTD acoustic wave simulation")
+    parser.add_argument("config", type=str, help="Path to the configuration JSON file")
+    parser.add_argument("--tqdm", action="store_true", help="Show progress bar")
+    parser.add_argument("--output", type=str, default="wavefield.npz", help="Output file for wavefield data")
+    args = parser.parse_args()
+    if not Path(args.config).exists():
+        print(f"Configuration file {args.config} does not exist.")
         sys.exit(1)
 
     config_path = Path(sys.argv[1])
     cfg = read_config(config_path)
-    run_sim(cfg)
+    run_sim(cfg, use_tqdm=args.tqdm, output_file=args.output)

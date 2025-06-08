@@ -28,6 +28,7 @@ def main():
         parser.error(f"{path} does not exist")
 
     frames = np.load(path)["frames"]            # shape (n_frames, ny, nx)
+    frames -= frames.mean(axis=(1, 2), keepdims=True)
     ny, nx = frames.shape[1:]
     vmax = np.percentile(np.abs(frames), args.clip * 100)
     vmin = -vmax
