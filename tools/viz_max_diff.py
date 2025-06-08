@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from common import run_animation
 
 import numpy as np
 
@@ -19,8 +20,12 @@ def main():
     if frames0.shape != frames1.shape:
         parser.error(f"Wavefields have different shapes: {frames0.shape} vs {frames1.shape}")
     diff = np.abs(frames0 - frames1)
-    max_diff = np.max(diff)
-    print(f"Maximum difference between wavefields: {max_diff:.3e} Pa")
+    run_animation(
+        diff, 
+        interval=30, 
+        clip=1.0, 
+        title="Difference between wavefields"
+    )
     
 if __name__ == "__main__":
     main()
