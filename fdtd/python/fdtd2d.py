@@ -58,9 +58,9 @@ def make_fd_coeffs(m: int) -> np.ndarray:
     >>> make_fd_coeffs(4)
     array([ 0.8       , -0.2       ,  0.03809524, -0.00357143])
     """
-    k = np.arange(1, m + 1, dtype=float)          # 1 … m
-    A = np.vstack([k ** (2*n + 1) for n in range(m)])   # NO .T !
-    rhs = np.zeros(m)
+    k = np.arange(1, m + 1, dtype=np.float32)          # 1 … m
+    A = np.vstack([k ** (2*n + 1) for n in range(m)]).astype(np.float32)   # NO .T !
+    rhs = np.zeros(m, dtype=np.float32)            # right-hand side
     rhs[0] = 0.5                                  # Σ c_k k = ½
     return np.linalg.solve(A, rhs)
 
@@ -158,7 +158,7 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
     n_steps, every = cfg["n_steps"], cfg["output_every"]
     deriv_cfg = cfg["derivative"]
     if "coeffs" in deriv_cfg:
-        coeffs = np.asarray(deriv_cfg["coeffs"], dtype=float)
+        coeffs = np.asarray(deriv_cfg["coeffs"], dtype=np.float32)
     elif "m" in deriv_cfg:
         coeffs = make_fd_coeffs(int(deriv_cfg["m"]))
     else:

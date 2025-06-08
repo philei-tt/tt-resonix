@@ -8,7 +8,7 @@
   "n_steps": 1500,
   "output_every": 4,  // 0 means no output
   "derivative": {
-    "m": 4, // It will calculated coefficients You can also setup manual coefficients, like this:
+    "m": 8, // It will calculated coefficients You can also setup manual coefficients, like this:
     // "coeffs": [
     //   0.5
     // ]
