@@ -35,10 +35,34 @@ def read_config(path):
     missing = required - cfg.keys()
     if missing:
         raise ValueError(f"Config missing keys: {', '.join(sorted(missing))}")
-    if "coeffs" not in cfg["derivative"]:
-        raise ValueError("derivative must contain a 'coeffs' array")
+    if "coeffs" not in cfg["derivative"] and "m" not in cfg["derivative"]:
+        raise ValueError("derivative must contain either 'coeffs' or 'm'")
     return cfg
 
+def make_fd_coeffs(m: int) -> np.ndarray:
+    """
+    Return the length-m vector [c1 … cm] such that
+
+        df/dx ≈ Σ_{k=1..m} c_k (f_{i+k} - f_{i-k}) / h
+
+    is 2m-th-order accurate on a uniform grid with spacing h.
+
+    Parameters
+    ----------
+    m : int   -  half-width of the stencil (m ≥ 1)
+
+    Examples
+    --------
+    >>> make_fd_coeffs(1)
+    array([0.5])
+    >>> make_fd_coeffs(4)
+    array([ 0.8       , -0.2       ,  0.03809524, -0.00357143])
+    """
+    k = np.arange(1, m + 1, dtype=float)          # 1 … m
+    A = np.vstack([k ** (2*n + 1) for n in range(m)])   # NO .T !
+    rhs = np.zeros(m)
+    rhs[0] = 0.5                                  # Σ c_k k = ½
+    return np.linalg.solve(A, rhs)
 
 # ------------------------------------------------------------------------- #
 # central derivative with Neumann (mirror) edges
@@ -132,8 +156,15 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
     dx, dy = cfg["dx"], cfg["dy"]
     c, rho = cfg["c"], cfg["rho"]
     n_steps, every = cfg["n_steps"], cfg["output_every"]
-    coeffs = cfg["derivative"]["coeffs"]
+    deriv_cfg = cfg["derivative"]
+    if "coeffs" in deriv_cfg:
+        coeffs = np.asarray(deriv_cfg["coeffs"], dtype=float)
+    elif "m" in deriv_cfg:
+        coeffs = make_fd_coeffs(int(deriv_cfg["m"]))
+    else:
+        raise ValueError("derivative needs either 'coeffs' or 'm'")
     m = len(coeffs)  # halo width = stencil half-size
+    print(f"Using finite difference coefficients for m = {m}: {coeffs}")
 
     # --- stability (CFL) --- #
     cfl = 0.4  # fairly conservative for non-staggered update
