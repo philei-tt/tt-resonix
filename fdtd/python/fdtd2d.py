@@ -232,8 +232,8 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
         print(f"{frame_idx + 1} frames saved to wavefield.npz.")
     else:
         print("No frames saved (output_every = 0).")
-    mpts = (ny * nx) * n_steps / (sim_end - sim_start) / 1e6  # million points per second
-    print(f"Simulation took {sim_end - sim_start:.2f} seconds. Mpts: {mpts:.2f} Mpts/s")
+    mptss = (ny * nx) * n_steps / (sim_end - sim_start) / 1e6  # million points per second
+    print(f"Simulation took {sim_end - sim_start:.2f} seconds. Througput: {mptss:.2f} Mpts/s")
 
 
 # -----------------------------------------------------------------------------#

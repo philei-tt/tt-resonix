@@ -5,146 +5,20 @@
 //
 #include <cmath>
 #include <cstddef>
-#include <fstream>
-#include <iostream>
-#include <numeric>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <fmt/core.h>
 
 #include <cnpy.h>             // third-party/cnpy
 #include <nlohmann/json.hpp>  // single-header nlohmann/json
 
-using json = nlohmann::json;
+#include "common/config.hpp"
+#include "common/sim.hpp"
+
 using std::size_t;
 
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
-template <typename T>
-inline T sqr(T x) {
-    return x * x;
-}
-
-std::vector<double> make_fd_coeffs(int m) {
-    // Solve  Σ_k c_k k^(2n+1) = rhs_n,  n = 0 … m-1
-    std::vector<double> rhs(m, 0.0);
-    rhs[0] = 0.5;
-
-    std::vector<std::vector<double>> A(m, std::vector<double>(m));
-    for (int n = 0; n < m; ++n) {
-        for (int k = 1; k <= m; ++k) {
-            A[n][k - 1] = std::pow(k, 2 * n + 1);
-        }
-    }
-
-    // Gaussian elimination (tiny m, so simplicity beats libraries)
-    for (int i = 0; i < m; ++i) {
-        // pivot
-        double piv = A[i][i];
-        for (int j = i; j < m; ++j) {
-            A[i][j] /= piv;
-        }
-        rhs[i] /= piv;
-        // eliminate
-        for (int r = 0; r < m; ++r) {
-            if (r != i) {
-                double f = A[r][i];
-                for (int c = i; c < m; ++c) {
-                    A[r][c] -= f * A[i][c];
-                }
-                rhs[r] -= f * rhs[i];
-            }
-        }
-    }
-    return rhs;  // length-m
-}
-
-struct Config {
-    int nx, ny, n_steps, output_every;
-    double dx, dy, c, rho;
-    std::vector<double> coeffs;  // c1..cm
-    int m;                       // halo width
-    // source
-    std::string src_type;
-    double f0, amp;
-    int sx, sy;  // in core indices
-};
-
-// operator<< for Config:
-inline std::ostream& operator<<(std::ostream& os, const Config& cfg) {
-    os << "Config(ny=" << cfg.ny << ", nx=" << cfg.nx << ", dx=" << cfg.dx << ", dy=" << cfg.dy << ", c=" << cfg.c
-       << ", rho=" << cfg.rho << ", n_steps=" << cfg.n_steps << ", output_every=" << cfg.output_every << ", coeffs=[";
-    for (size_t i = 0; i < cfg.coeffs.size(); ++i) {
-        os << cfg.coeffs[i];
-        if (i < cfg.coeffs.size() - 1) {
-            os << ", ";
-        }
-    }
-    os << "], m=" << cfg.m << ", src_type='" << cfg.src_type << "', f0=" << cfg.f0 << ", amp=" << cfg.amp
-       << ", sx=" << cfg.sx << ", sy=" << cfg.sy << ")";
-    return os;
-}
-
-Config read_config(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        throw std::runtime_error("Could not open config file: " + path);
-    }
-    json j;
-    try {
-        // Enable comments during parsing
-        j = json::parse(
-            file,
-            /*cb=*/nullptr,
-            /*allow_exceptions=*/true,  // allow exceptions to be thrown
-            /*ignore_comments=*/true    // ignore comments in the JSON file
-        );
-    } catch (const std::exception& e) {
-        throw std::runtime_error("Error parsing JSON: " + std::string(e.what()));
-    }
-
-    Config cfg;
-    cfg.nx = j["nx"];
-    cfg.ny = j["ny"];
-    cfg.dx = j["dx"];
-    cfg.dy = j["dy"];
-    cfg.c = j["c"];
-    cfg.rho = j["rho"];
-    cfg.n_steps = j["n_steps"];
-    cfg.output_every = j["output_every"];
-
-    const auto& d = j["derivative"];
-    if (d.contains("coeffs")) {
-        for (double c : d["coeffs"]) {
-            cfg.coeffs.push_back(c);
-        }
-    } else if (d.contains("m")) {
-        cfg.coeffs = make_fd_coeffs(d["m"]);
-    } else {
-        throw std::runtime_error("derivative needs 'coeffs' or 'm'");
-    }
-    cfg.m = static_cast<int>(cfg.coeffs.size());
-
-    // source
-    const auto& s = j["source"];
-    cfg.src_type = s["type"];
-    cfg.f0 = s["frequency"];
-    cfg.amp = s["amplitude"];
-    cfg.sx = static_cast<int>(s["position"][0]) + cfg.m;
-    cfg.sy = static_cast<int>(s["position"][1]) + cfg.m;
-    return cfg;
-}
-
 inline size_t idx(size_t i, size_t j, size_t stride) { return i * stride + j; }
-
-double gaussian_wavelet(double t, double f0, double amp) {
-    double tau = 1.0 / f0, t0 = 3.0 * tau;
-    return amp * std::exp(-sqr(t - t0) / sqr(tau));
-}
-double ricker_wavelet(double t, double f0, double amp) {
-    double a = M_PI * f0 * (t - 1.0 / f0);
-    return amp * (1.0 - 2.0 * sqr(a)) * std::exp(-sqr(a));
-}
 
 // -----------------------------------------------------------------------------
 // Simulation
@@ -154,8 +28,8 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: " << argv[0] << " config.json\n";
         return 1;
     }
-    Config C = read_config(argv[1]);
-    std::cout << "Config: " << C << "\n";
+    auto C = Config::read_config(argv[1]);
+    fmt::print("{}\n", C);
 
     const int halo = C.m;
     const size_t Ny = C.ny + 2 * halo;
@@ -216,6 +90,8 @@ int main(int argc, char** argv) {
     }
 
     // ---------------------------------------------------------------------
+    auto sim_start = std::chrono::high_resolution_clock::now();
+
     for (int it = 1; it <= C.n_steps; ++it) {
         double t = it * dt;
 
@@ -280,6 +156,10 @@ int main(int argc, char** argv) {
             }
         }
     }
+    auto sim_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> sim_duration = sim_end - sim_start;
+    double mptss = (static_cast<double>(C.ny * C.nx * C.n_steps) / 1000000.0) / sim_duration.count();  // million points
+    fmt::print("Simulation took {:.2f} seconds. Throughput: {:.2f} Mpts/s\n", sim_duration.count(), mptss);
 
     // ---------------------------------------------------------------------
     // store as NPZ  (shape: n_frames × ny × nx, C-order)
@@ -288,6 +168,6 @@ int main(int argc, char** argv) {
             static_cast<size_t>(n_frames), static_cast<size_t>(C.ny), static_cast<size_t>(C.nx)};
         cnpy::npz_save("wavefield_cpp.npz", "frames", frames.data(), shape, "w");
     }
-    std::cout << "Saved " << n_frames << " frames to wavefield_cpp.npz\n";
+    fmt::print("Saved {} frames to wavefield_cpp.npz\n", n_frames);
     return 0;
 }
