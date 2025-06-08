@@ -1,0 +1,6 @@
+[submodule "fdtd/cpp/third-party/cnpy"]
+	path = fdtd/cpp/third-party/cnpy
+	url = https://github.com/rogersce/cnpy
+[submodule "fdtd/cpp/third-party/json"]
+	path = fdtd/cpp/third-party/json
+	url = https://github.com/nlohmann/json
