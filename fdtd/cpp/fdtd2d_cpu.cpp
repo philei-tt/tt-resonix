@@ -18,7 +18,6 @@
 
 using std::size_t;
 
-inline size_t idx(size_t i, size_t j, size_t stride) { return i * stride + j; }
 using Dtype = float;  // data type for the simulation
 
 // -----------------------------------------------------------------------------
@@ -36,45 +35,29 @@ int main(int argc, char** argv) {
     const size_t Ny = C.ny + 2 * halo;
     const size_t Nx = C.nx + 2 * halo;
     const size_t stride = Nx;
+    const size_t default_stride = stride;
 
     const Dtype dt = 0.4 * std::min(C.dx, C.dy) / (C.c * std::sqrt(2.0));
 
     std::vector<Dtype> p(Ny * Nx, 0.0f);
     std::vector<Dtype> vx(Ny * Nx, 0.0f);
     std::vector<Dtype> vy(Ny * Nx, 0.0f);
+    std::vector<Dtype> div(C.ny * C.nx, 0.0f);
+
+
+    auto idx_s = [&](size_t i, size_t j, const size_t stride) {
+        return i * stride + j;  // C-order indexing
+    };
+
+    auto idx = [&](size_t i, size_t j) { return i * default_stride + j; };
+
+    auto src_pos = idx(C.sy, C.sx);
 
     const int n_frames = C.n_steps / C.output_every + 1;
     std::vector<Dtype> frames;
     frames.reserve(static_cast<size_t>(n_frames) * C.ny * C.nx);
 
     auto coeff = C.coeffs;  // copy for brevity
-    auto refresh = [&](std::vector<Dtype>& f) {
-        // West & East
-        for (size_t i = halo; i < Ny - halo; ++i) {
-            for (int k = 1; k <= halo; ++k) {
-                f[idx(i, halo - k, stride)] = f[idx(i, halo, stride)];
-                f[idx(i, Nx - halo + k - 1, stride)] = f[idx(i, Nx - halo - 1, stride)];
-            }
-        }
-        // South & North
-        for (int k = 1; k <= halo; ++k) {
-            for (size_t j = halo; j < Nx - halo; ++j) {
-                f[idx(halo - k, j, stride)] = f[idx(halo, j, stride)];
-                f[idx(Ny - halo + k - 1, j, stride)] = f[idx(Ny - halo - 1, j, stride)];
-            }
-        }
-    };
-
-    auto zero_normal_v = [&]() {
-        for (size_t i = halo; i < Ny - halo; ++i) {
-            vx[idx(i, halo, stride)] = 0.0f;           // west
-            vx[idx(i, Nx - halo - 1, stride)] = 0.0f;  // east
-        }
-        for (size_t j = halo; j < Nx - halo; ++j) {
-            vy[idx(halo, j, stride)] = 0.0f;           // south
-            vy[idx(Ny - halo - 1, j, stride)] = 0.0f;  // north
-        }
-    };
 
     // Pre-compute reciprocal distances
     const Dtype inv_dx = 1.0f / C.dx;
@@ -86,9 +69,87 @@ int main(int argc, char** argv) {
     // output frame 0  (pressure is all zeros)
     for (int i = 0; i < C.ny; ++i) {
         for (int j = 0; j < C.nx; ++j) {
-            frames.push_back(p[idx(i + halo, j + halo, stride)]);
+            frames.push_back(p[idx(i + halo, j + halo)]);
         }
     }
+
+    auto update_pressure = [&]() __attribute__((always_inline)) {
+        // ----------- divergence of v
+        for (int i = 0; i < C.ny; ++i) {
+            size_t ii = i + halo;
+            for (int j = 0; j < C.nx; ++j) {
+                size_t jj = j + halo;
+                Dtype sumx = 0.0, sumy = 0.0;
+                for (int k = 1; k <= halo; ++k) {
+                    sumx += coeff[k - 1] * (vx[idx(ii, jj + k)] - vx[idx(ii, jj - k)]);
+                    sumy += coeff[k - 1] * (vy[idx(ii + k, jj)] - vy[idx(ii - k, jj)]);
+                }
+                // Commpiler sometimes works in mysterious ways. Storing in div and then later 
+                // updating p is 5Mpts/s faster
+                div[idx_s(i, j, C.nx)] = Dtype(sumx * inv_dx + sumy * inv_dy);
+            }
+        }
+
+        // ------------- update pressure
+        for (int i = 0; i < C.ny; ++i) {
+            size_t ii = i + halo;
+            for (int j = 0; j < C.nx; ++j) {
+                size_t jj = j + halo;
+                p[idx_s(ii, jj, stride)] -= Dtype(dt) * rhoc2 * div[idx_s(i, j, C.nx)];
+            }
+        }
+    };
+
+    auto update_velosity = [&]() __attribute__((always_inline)) {
+        for (int i = 0; i < C.ny; ++i) {
+            size_t ii = i + halo;
+            for (int j = 0; j < C.nx; ++j) {
+                size_t jj = j + halo;
+                Dtype gpx = 0.0, gpy = 0.0;
+                for (int k = 1; k <= halo; ++k) {
+                    gpx += coeff[k - 1] * (p[idx(ii, jj + k)] - p[idx(ii, jj - k)]);
+                    gpy += coeff[k - 1] * (p[idx(ii + k, jj)] - p[idx(ii - k, jj)]);
+                }
+                vx[idx(ii, jj)] -= dt * inv_rho * gpx * inv_dx;
+                vy[idx(ii, jj)] -= dt * inv_rho * gpy * inv_dy;
+            }
+        }
+    };
+
+    auto source = [&]() {
+        if (C.src_type == "gaussian") {
+            return gaussian_wavelet<Dtype>;
+        } else {
+            return ricker_wavelet<Dtype>;
+        }
+    }();
+
+    auto zero_normal_v = [&]() {
+        for (size_t i = halo; i < Ny - halo; ++i) {
+            vx[idx(i, halo)] = 0.0f;           // west
+            vx[idx(i, Nx - halo - 1)] = 0.0f;  // east
+        }
+        for (size_t j = halo; j < Nx - halo; ++j) {
+            vy[idx(halo, j)] = 0.0f;           // south
+            vy[idx(Ny - halo - 1, j)] = 0.0f;  // north
+        }
+    };
+    auto refresh_neumann = [&](std::vector<Dtype>& f) {
+        // West & East
+        for (size_t i = halo; i < Ny - halo; ++i) {
+            for (int k = 1; k <= halo; ++k) {
+                f[idx(i, halo - k)] = f[idx(i, halo)];
+                f[idx(i, Nx - halo + k - 1)] = f[idx(i, Nx - halo - 1)];
+            }
+        }
+        // South & North
+        for (int k = 1; k <= halo; ++k) {
+            for (size_t j = halo; j < Nx - halo; ++j) {
+                f[idx(halo - k, j)] = f[idx(halo, j)];
+                f[idx(Ny - halo + k - 1, j)] = f[idx(Ny - halo - 1, j)];
+            }
+        }
+    };
 
     // ---------------------------------------------------------------------
     auto sim_start = std::chrono::high_resolution_clock::now();
@@ -96,63 +157,26 @@ int main(int argc, char** argv) {
     for (int it = 1; it <= C.n_steps; ++it) {
         Dtype t = it * dt;
 
-        // ----------- divergence of v
-        std::vector<Dtype> div(C.ny * C.nx, 0.0f);
-        for (int i = 0; i < C.ny; ++i) {
-            size_t ii = i + halo;
-            for (int j = 0; j < C.nx; ++j) {
-                size_t jj = j + halo;
-                Dtype sumx = 0.0, sumy = 0.0;
-                for (int k = 1; k <= halo; ++k) {
-                    sumx += coeff[k - 1] * (vx[idx(ii, jj + k, stride)] - vx[idx(ii, jj - k, stride)]);
-                    sumy += coeff[k - 1] * (vy[idx(ii + k, jj, stride)] - vy[idx(ii - k, jj, stride)]);
-                }
-                div[idx(i, j, C.nx)] = Dtype(sumx * inv_dx + sumy * inv_dy);
-            }
-        }
-
         // ----------- update pressure
-        for (int i = 0; i < C.ny; ++i) {
-            size_t ii = i + halo;
-            for (int j = 0; j < C.nx; ++j) {
-                size_t jj = j + halo;
-                p[idx(ii, jj, stride)] -= Dtype(dt) * rhoc2 * div[idx(i, j, C.nx)];
-            }
-        }
+        update_pressure();
 
         // ----------- point source
-        if (C.src_type == "gaussian") {
-            p[idx(C.sy, C.sx, stride)] += gaussian_wavelet<Dtype>(t, C.f0, C.amp);
-        } else {
-            p[idx(C.sy, C.sx, stride)] += ricker_wavelet<Dtype>(t, C.f0, C.amp);
-        }
+        p[src_pos] += source(t, C.f0, C.amp);
 
         // ----------- grad p  →  update v
-        for (int i = 0; i < C.ny; ++i) {
-            size_t ii = i + halo;
-            for (int j = 0; j < C.nx; ++j) {
-                size_t jj = j + halo;
-                Dtype gpx = 0.0, gpy = 0.0;
-                for (int k = 1; k <= halo; ++k) {
-                    gpx += coeff[k - 1] * (p[idx(ii, jj + k, stride)] - p[idx(ii, jj - k, stride)]);
-                    gpy += coeff[k - 1] * (p[idx(ii + k, jj, stride)] - p[idx(ii - k, jj, stride)]);
-                }
-                vx[idx(ii, jj, stride)] -= dt * inv_rho * gpx * inv_dx;
-                vy[idx(ii, jj, stride)] -= dt * inv_rho * gpy * inv_dy;
-            }
-        }
+        update_velosity();
 
         // ----------- enforce rigid boundaries & refresh halos
         zero_normal_v();
-        refresh(p);
-        refresh(vx);
-        refresh(vy);
+        refresh_neumann(p);
+        refresh_neumann(vx);
+        refresh_neumann(vy);
 
         // ----------- save snapshot
         if (it % C.output_every == 0) {
             for (int i = 0; i < C.ny; ++i) {
                 for (int j = 0; j < C.nx; ++j) {
-                    frames.push_back(p[idx(i + halo, j + halo, stride)]);
+                    frames.push_back(p[idx(i + halo, j + halo)]);
                 }
             }
         }
