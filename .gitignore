@@ -1,6 +1,5 @@
 .venv
 .vscode
-*.txt
 wavefield.npz
 .cache
 build

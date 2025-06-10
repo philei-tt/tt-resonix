@@ -3,7 +3,7 @@ import matplotlib.animation as anim
 import numpy as np
 
 
-def run_animation(frames, interval=30, clip=1.0, title="Title"):
+def run_animation(frames, interval=30, clip=1.0, title="Title", save_path=None):
     frames -= frames.mean(axis=(1, 2), keepdims=True)
     ny, nx = frames.shape[1:]
     vmax = np.percentile(np.abs(frames), clip * 100)
@@ -28,4 +28,10 @@ def run_animation(frames, interval=30, clip=1.0, title="Title"):
         return (im,)
 
     a = anim.FuncAnimation(fig, update, frames=len(frames), interval=interval, blit=True)
+
+    if save_path is not None:
+        print(f"Saving animation to {save_path} ...")
+        a.save(save_path, writer='pillow', fps=1000 / interval)
+        print("Animation saved.")
+
     plt.show()

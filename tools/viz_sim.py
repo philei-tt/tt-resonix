@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description="2-D FDTD simulation visualisation")
     parser.add_argument("wavefield", type=str, help="Path to the wavefield .npz file")
     parser.add_argument("--clip", type=float, metavar="P", default=1.0, help="Clip amplitude to P-percentile (0 < P < 1) (0.999 looks good)")
+    parser.add_argument("--savegif", type=str, metavar="PATH", help="Save animation to this path as a GIF file")
     parser.add_argument(
         "--interval", type=int, default=30, help="Milliseconds between animation frames"
     )
@@ -34,7 +35,8 @@ def main():
         frames, 
         interval=args.interval, 
         clip=args.clip, 
-        title="Acoustic pressure field"
+        title="Acoustic pressure field",
+        save_path=args.savegif
     )
 
 if __name__ == "__main__":
