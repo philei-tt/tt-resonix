@@ -15,6 +15,7 @@ find_package(ZLIB REQUIRED)              # cnpy -> ZIP
 # Executables
 # ---------------------------------------------------------------------------
 add_executable(fdtd2d fdtd2d_cpu.cpp)
+add_executable(fdtd2d_mt fdtd2d_cpu_mt.cpp)
 
 # --------------------------------------------------------------------------------
 # Helper library
@@ -37,4 +38,6 @@ target_include_directories(common PUBLIC
 # Link libraries
 # --------------------------------------------------------------------------------
 target_link_libraries(common PUBLIC fmt::fmt cnpy ZLIB::ZLIB)
+
 target_link_libraries(fdtd2d PRIVATE common)
+target_link_libraries(fdtd2d_mt PRIVATE common)
