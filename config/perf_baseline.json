@@ -11,7 +11,7 @@
     "m": 8
   },
   "source": {
-    "type": "ricker", // ricler, gaussian, sin, point
+    "type": "ricker",
     "frequency": 80.0,
     "position": [
       150,

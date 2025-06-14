@@ -15,7 +15,7 @@ from argparse import ArgumentParser
 
 import numpy as np
 
-dtype = np.float64  # data type used for simulation
+dtype = np.float32  # data type used for simulation
 
 def read_config(path):
     with open(path) as f:
@@ -234,7 +234,7 @@ def run_sim(cfg, use_tqdm=False, output_file="wavefield.npz"):
     else:
         print("No frames saved (output_every = 0).")
     mptss = (ny * nx) * n_steps / (sim_end - sim_start) / 1e6  # million points per second
-    print(f"Simulation took {sim_end - sim_start:.2f} seconds. Througput: {mptss:.2f} Mpts/s")
+    print(f"Simulation took {sim_end - sim_start:.2f} seconds. Throughput: {mptss:.2f} Mpts/s")
 
 
 # -----------------------------------------------------------------------------#
