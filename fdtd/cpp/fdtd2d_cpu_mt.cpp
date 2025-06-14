@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
     const double secs = std::chrono::duration<double>(t1 - t0).count();
     const double mpts_s = (total_pts / 1.0e6) / secs;
 
-    fmt::print("Simulation took {:.2f} s – {:.2f} Mpts/s on {} threads\n", secs, mpts_s, n_threads);
+    fmt::print("Simulation took {:.2f} seconds. Throughput: {:.2f} Mpts/s on {} threads\n", secs, mpts_s, n_threads);
 
     // ---------------------------------------------------------------------
     // store as NPZ  (shape: n_frames × ny × nx, C-order)
