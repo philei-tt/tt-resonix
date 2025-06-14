@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
 
     const size_t src_pos = idx(C.sy, C.sx);
 
-    const int n_frames = C.n_steps / C.output_every + 1;
+    const int n_frames = C.output_every == 0 ? 0 : C.n_steps / C.output_every + 1;
     std::vector<Dtype> frames;
     frames.reserve(static_cast<size_t>(n_frames) * C.ny * C.nx);
 
@@ -123,9 +123,11 @@ int main(int argc, char** argv) {
     };
     auto source = [&]() { return (C.src_type == "gaussian") ? gaussian_wavelet<Dtype> : ricker_wavelet<Dtype>; }();
     // pre-compute full frame 0 on the calling thread
-    for (int i = 0; i < C.ny; ++i) {
-        for (int j = 0; j < C.nx; ++j) {
-            frames.push_back(p[idx(i + halo, j + halo)]);
+    if (n_frames > 0) {
+        for (int i = 0; i < C.ny; ++i) {
+            for (int j = 0; j < C.nx; ++j) {
+                frames.push_back(p[idx(i + halo, j + halo)]);
+            }
         }
     }
 
@@ -211,7 +213,7 @@ int main(int argc, char** argv) {
                 refresh_neumann(vx);
                 refresh_neumann(vy);
 
-                if (it % C.output_every == 0) {
+                if (C.output_every and it % C.output_every == 0) {
                     for (int i = 0; i < C.ny; ++i) {
                         for (int j = 0; j < C.nx; ++j) {
                             frames.push_back(p[idx(i + halo, j + halo)]);

@@ -44,7 +44,6 @@ int main(int argc, char** argv) {
     std::vector<Dtype> vy(Ny * Nx, 0.0f);
     std::vector<Dtype> div(C.ny * C.nx, 0.0f);
 
-
     auto idx_s = [&](size_t i, size_t j, const size_t stride) {
         return i * stride + j;  // C-order indexing
     };
@@ -53,7 +52,7 @@ int main(int argc, char** argv) {
 
     auto src_pos = idx(C.sy, C.sx);
 
-    const int n_frames = C.n_steps / C.output_every + 1;
+    const int n_frames = C.output_every == 0 ? 0 : C.n_steps / C.output_every + 1;
     std::vector<Dtype> frames;
     frames.reserve(static_cast<size_t>(n_frames) * C.ny * C.nx);
 
@@ -67,9 +66,11 @@ int main(int argc, char** argv) {
 
     // ---------------------------------------------------------------------
     // output frame 0  (pressure is all zeros)
-    for (int i = 0; i < C.ny; ++i) {
-        for (int j = 0; j < C.nx; ++j) {
-            frames.push_back(p[idx(i + halo, j + halo)]);
+    if (n_frames > 0) {
+        for (int i = 0; i < C.ny; ++i) {
+            for (int j = 0; j < C.nx; ++j) {
+                frames.push_back(p[idx(i + halo, j + halo)]);
+            }
         }
     }
 
@@ -84,7 +85,7 @@ int main(int argc, char** argv) {
                     sumx += coeff[k - 1] * (vx[idx(ii, jj + k)] - vx[idx(ii, jj - k)]);
                     sumy += coeff[k - 1] * (vy[idx(ii + k, jj)] - vy[idx(ii - k, jj)]);
                 }
-                // Commpiler sometimes works in mysterious ways. Storing in div and then later 
+                // Commpiler sometimes works in mysterious ways. Storing in div and then later
                 // updating p is 5Mpts/s faster
                 div[idx_s(i, j, C.nx)] = Dtype(sumx * inv_dx + sumy * inv_dy);
             }
@@ -173,7 +174,7 @@ int main(int argc, char** argv) {
         refresh_neumann(vy);
 
         // ----------- save snapshot
-        if (it % C.output_every == 0) {
+        if (C.output_every and it % C.output_every == 0) {
             for (int i = 0; i < C.ny; ++i) {
                 for (int j = 0; j < C.nx; ++j) {
                     frames.push_back(p[idx(i + halo, j + halo)]);

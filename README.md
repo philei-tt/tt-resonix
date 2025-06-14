@@ -29,5 +29,17 @@ python3 ./fdtd/python/fdtd2d.py ./gt/acoustic_1st_ord_2d/0/config.json --tqdm --
 python3 ./tools/viz_sim.py --clip=0.999 wavefield.npz
 ```
 
+**- C++**
+```bash
+git submodule sync
+git submodule update --init --recursive
+cd fdtd/cpp/
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release -G Ninja ..
+ninja
+./fdtd2d ../../../config/perf_baseline.json         # Single-core cpu C++ implementation
+./fdtd2d_mt ../../../config/perf_baseline.json      # Multi-core cpu C++ implementation
+```
+
 ### Tools
 **- Compare with baseline**

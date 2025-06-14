@@ -1,4 +1,5 @@
 #include "common/sim.hpp"
+#include <cmath>
 
 template <typename Dtype>
 std::vector<Dtype> make_fd_coeffs(int m) {
