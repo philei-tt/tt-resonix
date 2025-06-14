@@ -37,13 +37,13 @@ std::vector<Dtype> make_fd_coeffs(int m) {
 }
 
 template <typename Dtype>
-double gaussian_wavelet(Dtype t, Dtype f0, Dtype amp) {
+Dtype gaussian_wavelet(Dtype t, Dtype f0, Dtype amp) {
     Dtype tau = 1.0 / f0, t0 = 3.0 * tau;
     return amp * std::exp(-sqr(t - t0) / sqr(tau));
 }
 
 template <typename Dtype>
-double ricker_wavelet(Dtype t, Dtype f0, Dtype amp) {
+Dtype ricker_wavelet(Dtype t, Dtype f0, Dtype amp) {
     Dtype a = M_PI * f0 * (t - 1.0 / f0);
     return amp * (1.0 - 2.0 * sqr(a)) * std::exp(-sqr(a));
 }
@@ -51,8 +51,8 @@ double ricker_wavelet(Dtype t, Dtype f0, Dtype amp) {
 template std::vector<float> make_fd_coeffs<float>(int m);
 template std::vector<double> make_fd_coeffs<double>(int m);
 
-template double gaussian_wavelet<float>(float t, float f0, float amp);
+template float gaussian_wavelet<float>(float t, float f0, float amp);
 template double gaussian_wavelet<double>(double t, double f0, double amp);
 
-template double ricker_wavelet<float>(float t, float f0, float amp);
+template float ricker_wavelet<float>(float t, float f0, float amp);
 template double ricker_wavelet<double>(double t, double f0, double amp);

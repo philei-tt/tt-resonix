@@ -141,8 +141,6 @@ int main(int argc, char** argv) {
     const int chunk = ny_int / n_threads;
     const int rem = ny_int % n_threads;
 
-    const double total_pts = static_cast<double>(C.ny) * C.nx * C.n_steps;
-
     // ---------------------------------------------------------------------
     auto worker = [&](unsigned tid) {
         // -------- slice this thread owns along Y --------------------------
@@ -238,6 +236,7 @@ int main(int argc, char** argv) {
     }
 
     auto t1 = std::chrono::high_resolution_clock::now();
+    const double total_pts = static_cast<double>(C.ny) * C.nx * C.n_steps;
     const double secs = std::chrono::duration<double>(t1 - t0).count();
     const double mpts_s = (total_pts / 1.0e6) / secs;
 
