@@ -1,5 +1,7 @@
 .venv
 .vscode
 wavefield.npz
+wavefield_cpp.npz
+wavefield_cuda.npz
 .cache
 build
