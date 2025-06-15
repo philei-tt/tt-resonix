@@ -21,7 +21,9 @@ def main():
         parser.error(f"Wavefields have different shapes: {frames0.shape} vs {frames1.shape}")
     diff = np.abs(frames0 - frames1)
     max_diff = np.max(diff)
+    rel_error = np.max(diff / (np.abs(frames0) + 1e-10))  # avoid division by zero
     print(f"Maximum difference between wavefields: {max_diff:.3e} Pa")
+    print(f"Relative error: {rel_error:.3e}")
     
 if __name__ == "__main__":
     main()
